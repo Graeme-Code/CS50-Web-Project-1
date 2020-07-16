@@ -1,12 +1,10 @@
 from django.shortcuts import render
-from django.http import HttpResponse
 from django import forms
 from markdown2 import Markdown
 from . import util
 from os.path import join
 from django.core.files import File
 from django.shortcuts import redirect
-import re
 import random
 
 class NewPageForm(forms.Form):
@@ -27,7 +25,10 @@ def entry(request, entry):
     try:
         display_entry = markdown_to_html(entry)
     except TypeError: 
-        display_entry = "Requested page was not found"
+        message = "Page doesnt exist"
+        return render( request, "encyclopedia/error.html", {
+            "message": message
+        } )
     #get title needed for directing edit page request
     title = request.get_full_path()
     title = title.strip("/")
@@ -55,20 +56,30 @@ def search(request):
             #check if the query a substring of an entry
         elif query in entry:
             search_results.append(entry)
-    print(search_results)
     return render(request, "encyclopedia/search_results.html", {
         "search_results": search_results   }) 
+
+def cleantitle(title):
+    cleantitle = title
+    for char in cleantitle:
+        if char == "#":
+            cleantitle = cleantitle.replace("#", "")
+        #check if first char is a space and remove it.
+    cleantitle = cleantitle.strip()
+        #replace whitespace with underscores
+    cleantitle = cleantitle.replace(" ", "_")
+    return cleantitle
 
 def newpage(request):
     if request.method == "POST":
         #get contents into varibles 
+        pagetitle = request.POST.get('title')
         title = request.POST.get('title')
-        print(title)
+        title = cleantitle(title)
         body = request.POST.get('body')
         #logic here to check if title = an entry in list of entry. 
         entries = util.list_entries()
         for entry in entries:
-            print(entry)
             if entry == title:
                 return render(request, "encyclopedia/error.html", {
                     "message": "Title already exists"
@@ -88,7 +99,7 @@ def newpage(request):
         #write to file
         with open(path, 'w') as f:
             newpage = File(f)
-            newpage.write(title)
+            newpage.write(pagetitle)
             newpage.write("\n")
             newpage.write("\n")
             newpage.write(body)
@@ -103,24 +114,24 @@ def editpage(request, title):
     if request.method == "POST": 
     #get the updated content
         body = request.POST['body']
-        #open file 
+        #get path
         path = join("/Users/graemebarnes/Desktop/web50/wiki/entries/" + title + ".md")
-        print(path)
-        print(title)
-        print(body)
+        #open file to get title as per orginal formatting
         with open(path, 'r') as f:
             existingpage = File(f)
             existingpage = existingpage.readlines()
             filetitle = existingpage[0]
-            print(filetitle)
+        #open file to re write existing title as per orginal and updated body 
         with open(path, 'w') as f:
             updatedpage = File(f)
             updatedpage.write(filetitle)
             updatedpage.write("\n")
             updatedpage.write("\n")
             updatedpage.write(body)
+        #go to the updated page
         return redirect("/" + title)
     else:
+        #get the complete content of entry file
         content = util.get_entry(title)
         #clean data so only post content is in varible
         content = content.splitlines()
